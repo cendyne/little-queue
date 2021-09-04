@@ -285,4 +285,5 @@
   (let [port (get args 1 (or (env :port) "9000"))
         host (get args 2 (or (env :host) "localhost"))
         ]
+    (printf "Listening on %s:%s" host port)
     (server app port host 100000000)))

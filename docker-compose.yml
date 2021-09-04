@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  little-queue:
+    image: cendyne/little-queue:latest
+    volumes:
+      - queue-data:/mnt
+    environment:
+      PORT: 8080
+      HOST: "0.0.0.0"
+      ADMIN_TOKEN: replace-me
+      DATABASE_URL: /mnt/db.sqlite3
+    ports:
+      - "9080:8080"
+volumes:
+  queue-data: {}

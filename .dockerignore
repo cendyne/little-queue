@@ -1,0 +1,7 @@
+build
+db.sqlite3
+.env
+Dockerfile
+README.md
+.git
+.gitignore

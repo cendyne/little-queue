@@ -24,6 +24,4 @@ jobs:
           DOCKER_REPO: ${{ secrets.DOCKER_REPO }}
           DOCKER_USER: ${{ secrets.DOCKER_USER }}
         run: |
-          echo "Repo ${DOCKER_REPO}"
-          echo "User ${DOCKER_USER}"
           ./dockerhub.sh

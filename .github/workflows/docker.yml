@@ -1,8 +1,6 @@
-name: Build and publish Janet docker images
+name: Build and publish little-queue
 
 on:
-  schedule:
-    - cron:  '22 1/8 * * *'
   push:
     branches:
     - main

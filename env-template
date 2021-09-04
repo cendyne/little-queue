@@ -1,0 +1,6 @@
+DATABASE_URL=./db.sqlite3
+JOY_ENV=development
+PORT=9000
+ADMIN_TOKEN=replace-me
+SESSION_TOKEN=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+CSRF_KEY=deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef

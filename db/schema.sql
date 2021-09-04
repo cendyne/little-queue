@@ -5,7 +5,7 @@ CREATE TABLE queue (
   name text unique not null,
   dead_queue_id integer,
   max_pulls integer not null default 5
-)
+, timeout integer not null default 60)
 CREATE TABLE job (
   id text primary key,
   queue_id integer not null,

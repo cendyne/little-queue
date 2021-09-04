@@ -52,6 +52,11 @@
   (when (or (nil? route-name) (= "" route-name)) (error "Name cannot be empty"))
   (def max-pulls (get-in request [:body :max-pulls]))
   (def dead-queue-name (get-in request [:body :dead-queue-name]))
+  (var timeout nil)
+  (if-let [
+    user-timeout (get-in request [:body :timeout])
+    user-timeout (scan-number user-timeout)
+    ] (set timeout (max 1 timeout)))
   (var queue (find-queue-by-name route-name))
   (var dead-queue (if dead-queue-name (find-queue-by-name dead-queue-name)))
 
@@ -66,12 +71,14 @@
   (set queue (update-queue queue {
     :max-pulls max-pulls
     :dead-queue-id dead-queue-id
+    :timeout timeout
     }))
 
   (application/json {
     :name route-name
     :max-pulls (get queue :max-pulls)
     :dead-queue-name (get dead-queue :name)
+    :timeout (get queue :timeout)
   }))
 (def put-queue (middleware/json (middleware/with-authentication put-queue-handler)))
 
@@ -179,11 +186,53 @@
     @{:status 404 :body "not found"}))
 (def delete-job (middleware/with-authentication delete-job-handler))
 
+(def- prioritized-search-sql (string
+  "select j.id "
+  "from job j "
+  "join queue q on j.queue_id = q.id "
+  "where j.pulls < q.max_pulls and j.invisible_until_date <= :now "
+  "order by priority_date "
+  "limit :limit"
+))
+(def- pull-sql (string
+  "update job "
+  "set pulls = pulls + 1, "
+  "invisible_until_date = :invis "
+  "where id = :id"
+))
+(defn get-queue-job-handler [request]
+  (def route-name (get-in request [:params :name]))
+  (when (or (nil? route-name) (= "" route-name)) (error "Name cannot be empty"))
+  (def queue (find-queue-by-name route-name))
+  (def dead-queue (find-queue-by-id (get queue :dead-queue-id)))
+  (def now (os/time))
+  (def invis (+ now (get queue :timeout)))
+  (var limit 1)
+  (if-let [
+    user-limit (get-in request [:query-string :limit])
+    user-limit (scan-number user-limit)
+    ] (set limit (min 100 user-limit)))
+  (def ids @[])
+  (db/with-transaction
+    (array/clear ids)
+    (def jobs (db/query prioritized-search-sql {:limit limit :now now}))
+    (each job jobs
+      (def id (get job :id))
+      (printf "%s %p" pull-sql {:id id :invis invis})
+      (db/query pull-sql {:id id :invis invis})
+      (array/push ids id)))
+
+  (application/json {
+    :jobs ids
+  }))
+(def get-queue-job (middleware/with-authentication get-queue-job-handler))
+
 (route :get "/" index :index)
 (route :get "/queues" queues :queues)
 (route :get "/queues/:name" get-queue :get-queue)
 (route :put "/queues/:name" put-queue :put-queue)
 (route :put "/queues/:name/job" put-job :put-job)
+(route :get "/queues/:name/job" get-queue-job :get-queue-job)
 (route :get "/job/:id" get-job :get-job)
 (route :delete "/job/:id" delete-job :delete-job)
 

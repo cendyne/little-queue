@@ -12,14 +12,14 @@
     ]
   )
 
-# (phony "server" []
-#   (if (= "development" (os/getenv "JOY_ENV"))
-#       # TODO check if entr exists
-#     (os/shell "find . -name '*.janet' | entr janet main.janet")
-#     (os/shell "janet src/main.janet")))
-#
-# (declare-executable
-#   :name "art"
-#   :entry "src/main.janet"
-#   )
+(phony "server" []
+  (if (= "development" (os/getenv "JOY_ENV"))
+      # TODO check if entr exists
+    (os/shell "find . -name '*.janet' | entr janet src/main.janet")
+    (os/shell "janet src/main.janet")))
+
+(declare-executable
+  :name "little-queue"
+  :entry "src/main.janet"
+  )
 

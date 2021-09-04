@@ -52,11 +52,7 @@
   (when (or (nil? route-name) (= "" route-name)) (error "Name cannot be empty"))
   (def max-pulls (get-in request [:body :max-pulls]))
   (def dead-queue-name (get-in request [:body :dead-queue-name]))
-  (var timeout nil)
-  (if-let [
-    user-timeout (get-in request [:body :timeout])
-    user-timeout (scan-number user-timeout)
-    ] (set timeout (max 1 timeout)))
+  (var timeout (get-in request [:body :timeout]))
   (var queue (find-queue-by-name route-name))
   (var dead-queue (if dead-queue-name (find-queue-by-name dead-queue-name)))
 
@@ -73,6 +69,9 @@
     :dead-queue-id dead-queue-id
     :timeout timeout
     }))
+  (when (= :null dead-queue-name)
+    # Explicitly set to null
+    (db/query "update queue set dead_queue_id = null where id = :id" {:id (get queue :id)}))
 
   (application/json {
     :name route-name
@@ -191,6 +190,7 @@
   "from job j "
   "join queue q on j.queue_id = q.id "
   "where j.pulls < q.max_pulls and j.invisible_until_date <= :now "
+  "and j.queue_id = :id "
   "order by priority_date "
   "limit :limit"
 ))
@@ -215,10 +215,9 @@
   (def ids @[])
   (db/with-transaction
     (array/clear ids)
-    (def jobs (db/query prioritized-search-sql {:limit limit :now now}))
+    (def jobs (db/query prioritized-search-sql {:limit limit :now now :id (get queue :id)}))
     (each job jobs
       (def id (get job :id))
-      (printf "%s %p" pull-sql {:id id :invis invis})
       (db/query pull-sql {:id id :invis invis})
       (array/push ids id)))
 
@@ -245,11 +244,43 @@
              (logger)
              ))
 
+(def- max-pull-sql (string
+  "select j.id, j.content, j.content_length, j.content_type, q.dead_queue_id, q.name, dq.name as dead_name "
+  "from job j "
+  "join queue q on j.queue_id = q.id "
+  "left join queue dq on q.dead_queue_id = dq.id "
+  "where j.pulls >= q.max_pulls"
+))
+(defn max-pull-worker []
+ (forever
+  (db/with-transaction
+    (each job (db/query max-pull-sql)
+      (def now (os/time))
+      (when (get job :dead-name)
+        (def dead-job (db/insert :job {
+          :id (generate-id)
+          :queue-id (get job :dead-queue-id)
+          :insert-date now
+          :priority-date now
+          :invisible-until-date now
+          :content (get job :content)
+          :content-type (get job :content-type)
+          :content-length (get job :content-length)
+          }))
+        (printf "Moved %s from %s to %s as %s" (get job :id) (get job :name) (get job :dead-name) (get dead-job :id)))
+      (unless (get job :dead-name)
+        (printf "Dropping job %s from %s" (get job :id) (get job :name)))
+      (db/delete :job (get job :id)))
+    )
+
+  (ev/sleep 60)))
+
 (defn main [& args]
   # Stuff must be available for the runtime within main
   (unless (load-secrets) (error "Could not load secrets"))
   (db/migrate (env :database-url))
   (db/connect (env :database-url))
+  (ev/call max-pull-worker)
 
   (let [port (get args 1 (or (env :port) "9000"))
         host (get args 2 (or (env :host) "localhost"))

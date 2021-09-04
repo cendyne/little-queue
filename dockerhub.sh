@@ -6,6 +6,7 @@ echo "Guessing GITHUB_SHA"
 GITHUB_SHA=$(git rev-parse HEAD)
 fi
 
+echo "$DOCKER_PASSWORD" | docker login -u $DOCKER_REPO --password-stdin
 
 # This script is only meant to run on main in github
 docker buildx build --platform "$PLATFORMS" . \

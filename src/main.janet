@@ -11,7 +11,7 @@
 (defn index [request] (application/json {}))
 
 (defn queues-handler [request]
-  (def queues (db/query "select q.name, q.max_pulls, dq.name as dead_name from queue q left join queue dq on q.dead_queue_id = dq.id"))
+  (def queues (db/query "select q.name, q.max_pulls, q.timeout, dq.name as dead_name from queue q left join queue dq on q.dead_queue_id = dq.id"))
   (application/json {
     :queues queues
   }))

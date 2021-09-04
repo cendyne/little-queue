@@ -14,16 +14,7 @@ echo "- $DOCKER_REPO:latest"
 echo "- $DOCKER_REPO:${GITHUB_SHA:0:7}"
 # This script is only meant to run on main in github
 docker buildx build --platform "$PLATFORMS" . \
-    --target=dev \
-    --tag "$DOCKER_REPO:latest" \
-    --tag "$DOCKER_REPO:${GITHUB_SHA:0:7}" \
-    --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-    --label "org.opencontainers.image.created=$DATE" \
-    --label "org.opencontainers.image.source=https://github.com/cendyne/little-queue" \
-    --push
-docker buildx build --platform "$PLATFORMS" . \
-    --target=core \
-    --tag $DOCKER_REPO:$TAGNAME \
+    --target=app \
     --tag "$DOCKER_REPO:latest" \
     --tag "$DOCKER_REPO:${GITHUB_SHA:0:7}" \
     --label "org.opencontainers.image.revision=$GITHUB_SHA" \

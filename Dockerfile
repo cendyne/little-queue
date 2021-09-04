@@ -7,7 +7,7 @@ COPY . /little-queue/
 ENV JOY_ENVIRONMENT production
 RUN jpm build
 
-FROM alpine
+FROM alpine as app
 # COPY --from=builder /app/ /app/
 COPY --from=builder /little-queue/build/little-queue /usr/local/bin/
 COPY db /opt/db

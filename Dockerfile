@@ -4,6 +4,7 @@ COPY project.janet /little-queue/
 WORKDIR /little-queue/
 RUN jpm deps
 COPY . /little-queue/
+ENV JOY_ENVIRONMENT production
 RUN jpm build
 
 FROM alpine

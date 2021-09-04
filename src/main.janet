@@ -2,6 +2,7 @@
 (use joy)
 (import ./secrets)
 (import ./middleware)
+(import json)
 
 (defn load-secrets [] (and
   (secrets/admin-token)
@@ -72,7 +73,7 @@
     :max-pulls (get queue :max-pulls)
     :dead-queue-name (get dead-queue :name)
   }))
-(def put-queue (middleware/with-authentication put-queue-handler))
+(def put-queue (middleware/json (middleware/with-authentication put-queue-handler)))
 
 (defn get-queue-handler [request]
   (def route-name (get-in request [:params :name]))
@@ -87,18 +88,110 @@
   }))
 (def get-queue (middleware/with-authentication get-queue-handler))
 
+(defn generate-id [&opt len count]
+  (default len 16)
+  (default count 0)
+  (when (< 128 count) (error "Could not make a random ID"))
+  (def value (encoding/encode (util/random len) :base64 :url-unpadded))
+  (cond
+    (or (string/has-prefix? "-" value) (string/has-prefix? "_" value))
+    (generate-id len (+ 1 count))
+    (or (string/has-prefix? "-" value) (string/has-prefix? "_" value))
+    (generate-id len (+ 1 count))
+    value
+  ))
+
+(defn put-job-handler [request]
+  (def route-name (get-in request [:params :name]))
+  (when (or (nil? route-name) (= "" route-name)) (error "Name cannot be empty"))
+  (def queue (find-queue-by-name route-name))
+  (def content-type (or
+    (get-in request [:headers "Content-Type"])
+    (get-in request [:headers "content-type"])
+    ))
+  (def content (get request :body ""))
+  (def content-length (length content))
+  (when (= 0 content-length) (error "Content length cannot be 0"))
+  (def id (generate-id))
+  (def now (os/time))
+  (var delay -1)
+  (if-let [
+    user-delay (get-in request [:query-string :delay])
+    user-delay (scan-number user-delay)
+    ] (set delay (max -1 delay)))
+  (var priority 0)
+  (if-let [
+    user-priority (get-in request [:query-string :priority])
+    user-priority (scan-number user-priority)
+    ] (set priority (max -10000 priority)))
+  (def priority-date (+ now priority))
+  (def invisible-until-date (+ now delay))
+  (def queue-id (get queue :id))
+
+  (def job (db/insert :job {
+    :id id
+    :queue-id queue-id
+    :insert-date now
+    :priority-date priority-date
+    :invisible-until-date invisible-until-date
+    :content content
+    :content-type content-type
+    :content-length content-length
+  }))
+  (when (nil? job) (error "Could not save job"))
+
+  (application/json {
+    :content-type content-type
+    :content-length content-length
+    :id id
+    # TODO render dates in ISO8601
+    :priority-date priority-date
+    :invisible-until-date invisible-until-date
+    :insert-date now
+  }))
+(def put-job (middleware/with-authentication put-job-handler))
+
+(defn get-job-handler [request]
+  (def id (get-in request [:params :id]))
+  (when (or (nil? id) (= "" id)) (error "id cannot be empty"))
+  (def job (as-> "select * from job where id = :id" ?
+    (db/query ? {:id id})
+    (get ? 0)))
+  (if job
+    @{
+      :status 200
+      :headers @{"Content-Type" (get job :content-type)}
+      :body (get job :content)
+      }
+    @{:status 404 :body "not found"}))
+(def get-job (middleware/with-authentication get-job-handler))
+
+(defn delete-job-handler [request]
+  (def id (get-in request [:params :id]))
+  (when (or (nil? id) (= "" id)) (error "id cannot be empty"))
+  (def job (as-> "select * from job where id = :id" ?
+    (db/query ? {:id id})
+    (get ? 0)))
+  (when job
+    (db/delete :job id))
+  (if job
+    @{:status 200 :body "OK"}
+    @{:status 404 :body "not found"}))
+(def delete-job (middleware/with-authentication delete-job-handler))
+
 (route :get "/" index :index)
 (route :get "/queues" queues :queues)
 (route :get "/queues/:name" get-queue :get-queue)
 (route :put "/queues/:name" put-queue :put-queue)
+(route :put "/queues/:name/job" put-job :put-job)
+(route :get "/job/:id" get-job :get-job)
+(route :delete "/job/:id" delete-job :delete-job)
 
 (def app (-> (handler)
              (middleware/authorization)
              (extra-methods)
              (query-string)
-             (middleware/json)
              (server-error)
-             (middleware/static-files)
              (not-found)
              (logger)
              ))

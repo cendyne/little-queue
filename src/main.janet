@@ -77,7 +77,7 @@
     :name route-name
     :max-pulls (get queue :max-pulls)
     :dead-queue-name (get dead-queue :name)
-    :timeout (get queue :timeout)
+    :timeout (get queue :timeout 60)
   }))
 (def put-queue (middleware/json (middleware/with-authentication put-queue-handler)))
 
@@ -206,7 +206,7 @@
   (def queue (find-queue-by-name route-name))
   (def dead-queue (find-queue-by-id (get queue :dead-queue-id)))
   (def now (os/time))
-  (def invis (+ now (get queue :timeout)))
+  (def invis (+ now (get queue :timeout 60)))
   (var limit 1)
   (if-let [
     user-limit (get-in request [:query-string :limit])
